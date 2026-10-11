@@ -1,0 +1,5 @@
+node_modules/
+*.log
+_verify.mjs
+_demo.png
+.DS_Store

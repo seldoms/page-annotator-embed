@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>page-annotator 接入示例</title>
+<style>
+  :root { --line:#e5e7eb; --fg:#111827; --muted:#6b7280; --accent:#4f46e5; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+         color:var(--fg); background:#f7f7f8; }
+  header { display:flex; align-items:center; gap:12px; padding:12px 20px;
+           background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .logo { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#4f46e5,#0ea5e9); }
+  nav { display:flex; gap:6px; margin-left:16px; }
+  nav button { padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:7px;
+               cursor:pointer; font:inherit; color:var(--fg); }
+  nav button.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  main { max-width:900px; margin:24px auto; padding:0 20px 80px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:16px; }
+  h2 { margin:0 0 6px; font-size:16px; }
+  p { margin:0 0 12px; color:var(--muted); font-size:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .box { flex:1; min-width:220px; height:110px; border:1px dashed #cbd5e1; border-radius:8px;
+         background:#fafafa; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+  input[type=text] { padding:8px 12px; border:1px solid var(--line); border-radius:7px; font:inherit; min-width:220px; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:13px; }
+</style>
+</head>
+<body data-view="home">
+
+<header>
+  <div class="logo"></div>
+  <strong>Demo App</strong>
+  <nav>
+    <button class="active" data-demo-view="home">首页</button>
+    <button data-demo-view="detail">详情</button>
+  </nav>
+</header>
+
+<main>
+  <div class="card">
+    <h2>这一块可以标注</h2>
+    <p>试试：<code>Shift+A</code> 进入标注模式 → 点任意元素 → 写意见 → <code>Enter</code> 提交。
+       提交后会自动回到待命，业务页面照常可点。</p>
+    <div class="row">
+      <div class="box">方块 A</div>
+      <div class="box">方块 B</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>输入与按钮</h2>
+    <p>表单控件也可以被标注，用来提「这里的 placeholder 不清楚」这类意见。</p>
+    <input type="text" placeholder="请输入内容">
+    <div class="row" style="margin-top:12px">
+      <button>主要按钮</button>
+      <button>次要按钮</button>
+    </div>
+  </div>
+</main>
+
+<script>
+  // 宿主配置：视图 id → 展示名；viewAttr 是切视图时改哪个 body 属性
+  window.PageAnnotator = { config: {
+    viewNames: { home: '首页', detail: '详情页' },
+    viewOrder: ['home', 'detail'],
+    viewAttr: 'data-view'
+  } };
+</script>
+<script src="../src/page-annotator-shim.js"></script>
+<script src="../src/page-annotator.js"></script>
+<script>
+  // 演示切视图（单页应用切 body 属性，插件按视图分桶存标注）
+  document.querySelectorAll('[data-demo-view]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('[data-demo-view]').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      document.body.dataset.view = b.dataset.demoView;
+    });
+  });
+</script>
+</body>
+</html>

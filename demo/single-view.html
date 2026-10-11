@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>单视图模式（不传 config）</title>
+<style>
+  body { margin:0; font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif; padding:24px; background:#f7f7f8; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:20px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<!-- 故意不传 window.PageAnnotator.config：验证单视图退化模式 -->
+<div class="card"><h2>卡片一</h2><p>点我，然后写意见。</p></div>
+<div class="card"><h2>卡片二</h2><p>所有标注应归到同一个分组，展示名为「本页」。</p></div>
+<script src="../src/page-annotator-shim.js"></script>
+<script src="../src/page-annotator.js"></script>
+</body>
+</html>

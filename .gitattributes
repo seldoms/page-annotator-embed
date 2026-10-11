@@ -1,0 +1,6 @@
+# 本项目要被别的项目引用，统一按 LF 存，避免 Windows 检出后变成 CRLF
+* text=auto eol=lf
+
+*.js  text eol=lf diff=javascript
+*.html text eol=lf
+*.md   text eol=lf
