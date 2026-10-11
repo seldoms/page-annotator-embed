@@ -6,6 +6,22 @@
 原始项目是 Chrome MV3 扩展（`chrome.storage` 持久化）。本仓库把持久化层换成
 `localStorage`，去掉扩展依赖，**两个 script 标签就能在任何网页里跑起来**，不碰业务代码。
 
+## 仓库位置与克隆方式
+
+本项目归 **sobey** 组织，不是 seldoms（seldoms 是 bobo-studio 工作台的归属）。
+
+```bash
+# 权威仓库（内网 Gitea，首选）
+git clone ssh://git@git.wbsyb.cloud:8282/sobey/page-annotator-embed.git
+
+# GitHub 镜像（外网可达；GitHub 上无 sobey 组织，故挂在 seldoms 下）
+git clone https://github.com/seldoms/page-annotator-embed.git
+```
+
+Gitea 的 web/API 走 `https://git.wbsyb.cloud:16601`，SSH 走 **8282**（注意两者端口不同）。
+内网访问 web 时若遇到 `Rejected request from RFC1918 IP to public server address`，
+是反代的 DNS-rebinding 防护，**用 SSH 端口即可绕过，不影响 clone/push**。
+
 ```
 src/page-annotator.js      上游 MV3 版本，逐字节未改（保持可 diff 回同步）
 src/page-annotator-shim.js 内嵌适配层，所有改动都在这里
