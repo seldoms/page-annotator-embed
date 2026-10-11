@@ -279,6 +279,7 @@
      位置贴着被点的元素算，越界时自动翻边，滚动时跟随。 */
   var POP_ID = 'pa-entry-pop';
   var popPin = null;
+  var popUserMoved = false;   // 本次打开后用户是否手动拖过弹窗
   var POP_CSS_READY = false;
   var toastTimer = null;   // 在 openEntry 用到，须早于它声明（var 提升但赋值不会）
 
@@ -315,13 +316,21 @@
       el.querySelector('.pa-entry-ok').addEventListener('click', commitEntry);
       el.querySelector('.pa-entry-x').addEventListener('click', cancelEntry);
       el.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+
+      /* 头部当把手。被拖动后 popUserMoved=true，后续 placePop 不再把弹窗
+         拉回元素锚点 —— 用户明确摆了位置就别跟元素抢。 */
+      makeDraggable(el, el.querySelector('.pa-entry-hd'), {
+        onMove: function () { popUserMoved = true; }
+      });
     }
     return el;
   }
 
-  /** 贴着 (vx, vy) 摆弹层，越界翻边。pin.x/y 是文档坐标，要减滚动量。 */
+  /** 贴着 (vx, vy) 摆弹层，越界翻边。pin.x/y 是文档坐标，要减滚动量。
+      用户手动拖过就不再跟随元素，否则 scroll 跟随会把拖好的位置拽回去。 */
   function placePop(vx, vy) {
     var el = popEl();
+    if (popUserMoved) return;
     var w = el.offsetWidth || 288, h = el.offsetHeight || 150;
     var left = vx + 14, top = vy + 14;
     if (left + w > window.innerWidth - 12) left = vx - w - 14;
@@ -330,6 +339,9 @@
     if (top < 12) top = 12;
     el.style.left = left + 'px';
     el.style.top = top + 'px';
+    /* 每次按锚点摆都要清掉拖拽可能设的 right/bottom，否则会被反向拉伸 */
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
   }
 
   function movePop() {
@@ -340,6 +352,7 @@
   function openEntry(pin) {
     if (!pin) return;
     popPin = pin;
+    popUserMoved = false;      // 每次新开一条都重新贴着元素，用户一拖就不再跟随
     var el = popEl();
     el.querySelector('.pa-entry-t').textContent = pin.target || '元素';
     var ta = el.querySelector('textarea');
@@ -603,6 +616,114 @@
     copyOrDownload(md, function (ok, msg) { toast(msg); });
   }
 
+  /* ---------------- 通用拖拽（面板 + 就地弹窗）----------------
+     两个浮层都做成「可拖到任意位置、位置记住」：
+       - 用 pointer 事件统一处理鼠标/触控/笔，setPointerCapture 防止
+         指针移出元素后丢失 move 事件。
+       - 位置存 sessionStorage（面板是常驻控件，跨页面刷新不该丢；
+         弹层每次打开都重新贴着元素，直接复用上次位置反而不自然，
+         所以弹层不持久化，只在本次打开期间可拖）。
+       - 拖拽时给 body 加 pa-dragging 抑制文本选中，
+         并在松手时 clamp 回视口，避免拖到屏幕外找不回来。
+       - 位置按「视口坐标」存：面板是 position:fixed，用视口坐标最直接；
+         弹窗同样 fixed，滚动页面时不会漂。 */
+  var DRAG_KEY = 'pa:panelpos';
+  var dragState = null;
+
+  function clampToViewport(x, y, w, h) {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var M = 8;   // 留一点边距，别让把手整个贴到屏幕外抓不住
+    return {
+      x: Math.min(Math.max(x, M), Math.max(M, vw - w - M)),
+      y: Math.min(Math.max(y, M), Math.max(M, vh - h - M))
+    };
+  }
+
+  /**
+   * 给 el 装上拖拽能力。handle 是拖拽把手；el 自身用 position:fixed 定位。
+   * opts.persist 存不存位置；opts.onMove 拖动时的额外回调（弹窗要脱离元素锚点）。
+   */
+  function makeDraggable(el, handle, opts) {
+    opts = opts || {};
+    if (!el || !handle || el.__paDraggable) return;
+    el.__paDraggable = true;
+
+    handle.addEventListener('pointerdown', function (e) {
+      // 只认左键；别抢按钮/输入框的点击
+      if (e.button !== 0) return;
+      var t = e.target;
+      if (t && (t.closest('button,input,select,textarea,a,[contenteditable]'))) return;
+
+      var r = el.getBoundingClientRect();
+      dragState = {
+        el: el,
+        dx: e.clientX - r.left,      // 按住点在元素内的相对位置
+        dy: e.clientY - r.top,
+        w: r.width, h: r.height,
+        moved: false
+      };
+      /* vendor 用 right/top 锚定面板。切到 left/top 锚定时必须先把当前视觉位置
+         写回 left/top 再清 right —— 直接清会让元素瞬间跳回左上角，
+         而拖拽起点记的是切换前的位置，手感就错位了。 */
+      el.style.left = r.left + 'px';
+      el.style.top = r.top + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 旧浏览器降级 */ }
+      document.body.classList.add('pa-dragging');
+      el.classList.add('pa-dragging');
+      e.preventDefault();
+      if (opts.onStart) opts.onStart();
+    });
+
+    handle.addEventListener('pointermove', function (e) {
+      if (!dragState || dragState.el !== el) return;
+      var p = clampToViewport(
+        e.clientX - dragState.dx,
+        e.clientY - dragState.dy,
+        dragState.w, dragState.h
+      );
+      el.style.left = p.x + 'px';
+      el.style.top = p.y + 'px';
+      dragState.moved = true;
+      if (opts.onMove) opts.onMove(p);
+    });
+
+    function endDrag(e) {
+      if (!dragState || dragState.el !== el) return;
+      try { handle.releasePointerCapture(e.pointerId); } catch (err) { /* noop */ }
+      document.body.classList.remove('pa-dragging');
+      el.classList.remove('pa-dragging');
+      dragState = null;
+      if (opts.persist) savePos(el);
+      if (opts.onEnd) opts.onEnd();
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+
+  function savePos(el) {
+    try {
+      var r = el.getBoundingClientRect();
+      sessionStorage.setItem(DRAG_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+    } catch (e) { /* 隐私模式下 sessionStorage 可能不可写 */ }
+  }
+  function restorePos(el) {
+    var raw = null;
+    try { raw = sessionStorage.getItem(DRAG_KEY); } catch (e) { return false; }
+    if (!raw) return false;
+    var d = null;
+    try { d = JSON.parse(raw); } catch (e) { return false; }
+    if (!d || typeof d.x !== 'number' || typeof d.y !== 'number') return false;
+    var r = el.getBoundingClientRect();
+    var p = clampToViewport(d.x, d.y, r.width, r.height);
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    el.style.right = 'auto';    // 覆盖 vendor 的 right 锚定
+    el.style.bottom = 'auto';
+    return true;
+  }
+
   /* ---------------- 视觉重做：纯白净版 ----------------
      策略：白底 + 中性灰阶承担层级，强调色只留一个靛蓝（#4f46e5），
      危险态用红。覆盖写在 vendor 的 #pa-style 之后，同优先级后定义者胜，
@@ -610,6 +731,23 @@
   var THEME_CSS = [
     /* 浮层点击穿透：这两个是实心 div，显示期间各挡一块点击区 */
     '#pa-toast,.pa-hint{pointer-events:none!important}',
+
+    /* ---------------- 拖拽 ---------------- */
+    /* 拖拽中：全局禁止文本选中，否则按住拖会一路刷蓝 */
+    'body.pa-dragging,body.pa-dragging *{user-select:none!important;-webkit-user-select:none!important;' +
+      'cursor:grabbing!important}',
+    /* 把手区域：整条头部都能拖，不要求精确点中某个小图标 */
+    '.pa-hd,.pa-entry-hd{cursor:grab}',
+    '.pa-hd .pa-b,.pa-hd b,.pa-entry-hd .pa-entry-t{cursor:grab}',
+    /* 把手上盖一层不可见的加高命中区，窄头部也容易按住 */
+    '.pa-hd::before,.pa-entry-hd::before{content:"";position:absolute;inset:0;cursor:grab}',
+    '.pa-hd{position:relative}',
+    '.pa-entry-hd{position:relative}',
+    '.pa-hd button,.pa-hd input,.pa-hd a,.pa-entry-hd button,.pa-entry-hd input{position:relative;z-index:1}',
+    /* 拖起来时给点反馈，明确「拿住了」 */
+    '.pa-panel.pa-dragging,.pa-entry.pa-dragging{box-shadow:0 8px 16px rgba(16,24,40,.10),' +
+      '0 24px 56px rgba(16,24,40,.20);transition:none}',
+    '.pa-panel.pa-dragging .pa-hd,.pa-entry.pa-dragging .pa-entry-hd{cursor:grabbing}',
 
     /* 面板骨架 */
     '.pa-panel{width:344px;background:#fff;color:#18181b;border:1px solid #e8eaef;border-radius:14px;' +
@@ -773,6 +911,7 @@
     '<li>想放弃刚标的这条，<kbd>Esc</kbd> 或点输入框外面</li>' +
     '<li>右侧列表可回看、补写、删除；上方筛选框按文字与意见过滤</li>' +
     '<li>筛选框右侧的<b>「连续标注」</b>：开启后登记完不退出，可接着点下一个元素</li>' +
+    '<li><b>面板和弹窗都能拖着走</b>：按住顶部标题栏即可拖到顺手的位置</li>' +
     '</ul>' +
     '<div class="pa-keys">' +
     '<div><span>临时穿透，正常操作页面</span><span><kbd>Alt</kbd> 按住</span></div>' +
@@ -822,6 +961,14 @@
     var list = panel.querySelector('[data-list]');
     panel.insertBefore(find, list);
     var findInput = find.querySelector('[data-find]');
+
+    /* 面板可拖动：头部整条当把手，位置存 sessionStorage（刷新页面仍在）。
+       面板是常驻控件，被用户摆在顺手的地方就该一直待在那儿。 */
+    var hd = panel.querySelector('.pa-hd');
+    if (hd) {
+      makeDraggable(panel, hd, { persist: true });
+      restorePos(panel);
+    }
 
     /* 下载按钮：与「复制反馈」并排 */
     var ft = panel.querySelector('.pa-ft');
